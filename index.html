@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Creator PWA</title>
+
+  <!-- Bootstrap CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-5">
+  <h3 class="text-center mb-4">PDF Creator</h3>
+
+  <div class="mb-3">
+    <label>Select PDF</label>
+    <input type="file" id="pdfInput" class="form-control" accept="application/pdf">
+  </div>
+
+  <div class="mb-3">
+    <label>Select Images</label>
+    <input type="file" id="imageInput" class="form-control" accept="image/*" multiple>
+  </div>
+
+  <button id="createBtn" class="btn btn-dark w-100 mb-3" disabled>
+    Create New PDF
+  </button>
+
+  <button id="shareBtn" class="btn btn-dark w-100" disabled>
+    Share
+  </button>
+</div>
+
+<!-- pdf-lib -->
+<script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+
+<script>
+const pdfInput = document.getElementById("pdfInput");
+const imageInput = document.getElementById("imageInput");
+const createBtn = document.getElementById("createBtn");
+const shareBtn = document.getElementById("shareBtn");
+
+let newPdfBlob = null;
+
+// Enable Create button when both selected
+function checkFiles() {
+  if (pdfInput.files.length && imageInput.files.length) {
+    createBtn.disabled = false;
+    createBtn.classList.remove("btn-dark");
+    createBtn.classList.add("btn-primary");
+  } else {
+    createBtn.disabled = true;
+    createBtn.classList.add("btn-dark");
+    createBtn.classList.remove("btn-primary");
+  }
+}
+
+pdfInput.addEventListener("change", checkFiles);
+imageInput.addEventListener("change", checkFiles);
+
+// Create new PDF
+createBtn.addEventListener("click", async () => {
+  const { PDFDocument } = PDFLib;
+
+  const existingPdfBytes = await pdfInput.files[0].arrayBuffer();
+  const pdfDoc = await PDFDocument.load(existingPdfBytes);
+
+  for (let imgFile of imageInput.files) {
+    const imgBytes = await imgFile.arrayBuffer();
+
+    let image;
+    if (imgFile.type.includes("png")) {
+      image = await pdfDoc.embedPng(imgBytes);
+    } else {
+      image = await pdfDoc.embedJpg(imgBytes);
+    }
+
+    const page = pdfDoc.addPage();
+    const { width, height } = page.getSize();
+
+    page.drawImage(image, {
+      x: 0,
+      y: 0,
+      width: width,
+      height: height,
+    });
+  }
+
+  const pdfBytes = await pdfDoc.save();
+  newPdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+
+  // Enable Share button
+  shareBtn.disabled = false;
+  shareBtn.classList.remove("btn-dark");
+  shareBtn.classList.add("btn-primary");
+});
+
+// Share
+shareBtn.addEventListener("click", async () => {
+  const file = new File([newPdfBlob], "new.pdf", { type: "application/pdf" });
+
+  if (navigator.share && navigator.canShare({ files: [file] })) {
+    await navigator.share({
+      files: [file],
+      title: "New PDF",
+    });
+  } else {
+    // fallback download
+    const url = URL.createObjectURL(newPdfBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "new.pdf";
+    a.click();
+  }
+});
+
+// Register service worker
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+
+</body>
+</html>
